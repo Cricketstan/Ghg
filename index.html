@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Kick Live Player</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- JWPlayer -->
+<script src="https://cdn.jwplayer.com/libraries/IDzF9Zmk.js"></script>
+
+<style>
+    body { 
+      margin: 0; 
+    } 
+    .jwplayer { 
+      position: absolute !important; 
+    } 
+    .jwplayer.jw-flag-aspect-mode { 
+      min-height: 100%; 
+      max-height: 100%; 
+    } 
+</style>
+</head>
+
+<body>
+
+<div id="player"></div>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const USER = urlParams.get("id");
+
+// Proxy prefix
+const PROXY = "https://sony-liv-proxyb.wasmer.app/stream_proxy.php?url=";
+
+async function loadKickData() {
+    const apiUrl = "https://kick.com/api/v2/channels/" + USER;
+
+    try {
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+
+        if (data.livestream && data.livestream.is_live === true) {
+
+            // Apply proxy to playback URL
+            const playback = PROXY + encodeURIComponent(data.playback_url);
+
+            jwplayer("player").setup({
+                file: playback,
+                width: "0",
+                height: "0",
+                
+                autostart: true
+            });
+
+        } else {
+            document.getElementById("player").innerHTML =
+                "<h2 style='color:white;text-align:center;margin-top:40vh;opacity:0.6;'>Stream Offline</h2>";
+        }
+
+    } catch (err) {
+        console.error(err);
+        document.getElementById("player").innerHTML =
+            "<h2 style='color:white;text-align:center;margin-top:40vh;'>Error Loading Stream</h2>";
+    }
+}
+
+loadKickData();
+</script>
+
+</body>
+</html>
