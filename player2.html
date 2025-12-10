@@ -1,170 +1,278 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Kick Live Player</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <title>DPlayer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<!-- Plyr CSS & JS -->
-<link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
-<script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dplayer@1.26.0/dist/DPlayer.min.js"></script>
 
-<!-- hls.js for M3U8 playback -->
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    #dplayer { width: 100%; height: 100%; }
 
-<style>
-    body { margin: 0; background:black; }
+    .dplayer-video-normal { object-fit: contain !important; }
+    .dplayer-video-zoomed { object-fit: cover !important; }
 
-    #loadingScreen {
-        position: fixed; top: 0; left: 0;
-        width: 100%; height: 100%;
-        background: black;
-        display: flex; flex-direction: column;
-        justify-content: center; align-items: center;
-        z-index: 9999;
+    /* ---- BUTTONS ---- */
+    .dplayer-icons-right .dplayer-zoom,
+    .dplayer-icons-right .dplayer-quality {
+      display: inline-block;
+      width: 40px;
+      height: 100%;
+      text-align: center;
+      cursor: pointer;
+      vertical-align: middle;
+      margin-right: 4px;
+      color: #fff;
+      position: relative;
     }
 
-    .spinner {
-        width: 60px; height: 60px;
-        border: 6px solid rgba(255,255,255,0.3);
-        border-top-color: #fff;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
+    .dplayer-icons-right .dplayer-zoom:hover,
+    .dplayer-icons-right .dplayer-quality:hover {
+      color: #b7daff;
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .loading-text {
-        margin-top: 15px;
-        font-size: 20px;
-        color: white; opacity: 0.8;
-        font-family: Arial, sans-serif;
+    .dplayer-icons-right .dplayer-zoom svg,
+    .dplayer-icons-right .dplayer-quality svg {
+      width: 20px;
+      height: 20px;
+      margin-top: 10px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
-    html, body { height: 100%; }
-
-    #player {
-        position: fixed;
-        inset: 0;
+    /* ---- QUALITY MENU ---- */
+    .dplayer-quality-menu {
+      position: absolute;
+      right: 0;
+      bottom: 50px;
+      background: rgba(28,28,28,0.9);
+      border-radius: 2px;
+      padding: 5px 0;
+      display: none;
+      min-width: 110px;
+      z-index: 100;
     }
+    .dplayer-quality-menu.show { display: block; }
 
-    .plyr {
-        width: 100%;
-        height: 100%;
+    .dplayer-quality-menu-item {
+      padding: 6px 15px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
     }
-</style>
+    .dplayer-quality-menu-item:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    .dplayer-quality-menu-item.active {
+      color: #b7daff;
+    }
+  </style>
 </head>
 
 <body>
-
-<div id="loadingScreen">
-    <div class="spinner"></div>
-    <div class="loading-text">Loading Stream…</div>
-</div>
-
-<div id="player"></div>
+<div id="dplayer"></div>
 
 <script>
-const urlParams = new URLSearchParams(window.location.search);
-const USER = urlParams.get("id");
+let dp, zoomed = false, currentQuality = "Auto", sources = {};
 
-const PROXY = "https://sony-liv-proxyb.wasmer.app/stream_proxy.php?url=";
+const qualityMap = {
+  "240": "240p",
+  "360": "360p",
+  "480": "480p",
+  "540": "540p",
+  "720": "720p",
+  "1080": "1080p"
+};
 
-async function loadKickData() {
-    const apiUrl = "https://kick.com/api/v2/channels/" + USER;
+/* ---- SAME SVG AS FIRST PLAYER ---- */
+const zoomSVG = 
+  <svg viewBox="0 0 24 24">
+    <path d="M15 4V7C15 8.1 15.9 9 17 9H20M9 4V7C9 8.1 8.1 9 7 9H4M15 20V17C15 15.9 15.9 15 17 15H20M9 20V17C9 15.9 8.1 15 7 15H4"/>
+  </svg>
+;
 
-    try {
-        const res = await fetch(apiUrl);
-        const data = await res.json();
+const qualitySVG = 
+  <svg viewBox="0 0 32 32">
+    <path d="M28 6L4 6M28 16L4 16M28 26L4 26M24 3L24 9M8 13L8 19M20 23L20 29"/>
+  </svg>
+;
 
-        if (data.livestream && data.livestream.is_live === true) {
+/* -------------------------------
+      FETCH KICK STREAM URL
+-------------------------------- */
+async function getKickStream(username) {
+  try {
+    const res = await fetch(https://kick.com/api/v2/channels/${username});
+    const json = await res.json();
 
-            const playback = PROXY + encodeURIComponent(data.playback_url);
+    if (!json.playback_url) return alert("stream offline!");
 
-            // Inject video element
-            const playerContainer = document.getElementById("player");
-            playerContainer.innerHTML = `
-                <video id="liveVideo" class="plyr" controls playsinline autoplay></video>
-            `;
-
-            const video = document.getElementById("liveVideo");
-
-            // Plyr instance
-            const plyrPlayer = new Plyr(video, {
-                settings: ["quality"],
-                quality: {
-                    default: 720,
-                    forced: true,
-                    options: []
-                }
-            });
-
-            function hideLoading() {
-                const ls = document.getElementById("loadingScreen");
-                if (ls) ls.style.display = "none";
-            }
-
-            // HLS handling + quality menu
-            if (Hls.isSupported()) {
-                const hls = new Hls({
-                    enableWorker: true,
-                });
-
-                hls.loadSource(playback);
-                hls.attachMedia(video);
-
-                // When levels are found → populate quality list
-                hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-                    hideLoading();
-
-                    const availableQualities = hls.levels.map((lvl) => lvl.height).sort((a,b)=>b-a);
-
-                    plyrPlayer.settings.enabled = true;
-                    plyrPlayer.quality.options = availableQualities;
-
-                    // When user selects a quality
-                    plyrPlayer.on("qualitychange", (event) => {
-                        const chosenQuality = event.detail.quality;
-
-                        hls.levels.forEach((level, index) => {
-                            if (level.height === chosenQuality) {
-                                hls.currentLevel = index;
-                            }
-                        });
-                    });
-
-                    video.play().catch(()=>{});
-                });
-
-            } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                // Safari native
-                video.src = playback;
-                video.addEventListener("loadedmetadata", () => {
-                    hideLoading();
-                    video.play().catch(()=>{});
-                });
-
-            } else {
-                hideLoading();
-                playerContainer.innerHTML =
-                    "<h2 style='color:white;text-align:center;margin-top:40vh;'>HLS not supported</h2>";
-            }
-
-        } else {
-            document.getElementById("loadingScreen").style.display = "none";
-            document.getElementById("player").innerHTML =
-                "<h2 style='color:white;text-align:center;margin-top:40vh;opacity:0.7;'>Stream Offline</h2>";
-        }
-
-    } catch (err) {
-        document.getElementById("loadingScreen").style.display = "none";
-        document.getElementById("player").innerHTML =
-            "<h2 style='color:white;text-align:center;margin-top:40vh;'>Error Loading Stream</h2>";
-    }
+    loadMasterPlaylist(json.playback_url);
+  } catch (e) {
+    alert("Kick Error: " + e.message);
+  }
 }
 
-loadKickData();
-</script>
+/* -------------------------------
+     PARSE M3U8 MASTER PLAYLIST
+-------------------------------- */
+async function loadMasterPlaylist(url) {
+  try {
+    const r = await fetch(url);
+    const txt = await r.text();
+    const lines = txt.split("\n");
 
+    sources = { "Auto": url };
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith("#EXT-X-STREAM-INF")) {
+        const match = lines[i].match(/RESOLUTION=(\d+)x(\d+)/);
+        const next = lines[i+1];
+
+        if (match && next.startsWith("http")) {
+          const h = match[2];
+          const label = qualityMap[h] || (h + "p");
+          sources[label] = next.trim();
+        }
+      }
+    }
+
+    currentQuality = sources["720p"] ? "720p" : "Auto";
+
+    initPlayer(sources[currentQuality]);
+
+  } catch (e) {
+    alert("Playlist Error: " + e.message);
+  }
+}
+/* -------------------------------
+            INIT PLAYER
+-------------------------------- */
+function initPlayer(url) {
+  if (dp) dp.destroy();
+
+  dp = new DPlayer({
+    container: document.getElementById("dplayer"),
+    autoplay: true,
+    video: { url, 
+    type: "hls",
+    pic: ""},
+    theme: '#b7daff'
+  });
+
+  dp.video.classList.add("dplayer-video-normal");
+
+  setTimeout(addCustomControls, 600);
+
+  dp.video.muted = false;
+  dp.video.volume = 1;
+}
+
+/* -------------------------------
+      ADD ZOOM + QUALITY BUTTONS
+-------------------------------- */
+function addCustomControls() {
+  const controls = document.querySelector(".dplayer-icons-right");
+  if (!controls) return setTimeout(addCustomControls, 100);
+
+  // remove old buttons
+  [".dplayer-zoom", ".dplayer-quality"].forEach(c => {
+    const old = controls.querySelector(c);
+    if (old) old.remove();
+  });
+
+  /* ---- ZOOM BUTTON ---- */
+  const zoomBtn = document.createElement("div");
+  zoomBtn.className = "dplayer-zoom";
+  zoomBtn.innerHTML = zoomSVG;
+  zoomBtn.onclick = () => {
+    zoomed = !zoomed;
+    dp.video.classList.toggle("dplayer-video-zoomed", zoomed);
+    dp.video.classList.toggle("dplayer-video-normal", !zoomed);
+  };
+
+  /* ---- QUALITY BUTTON ---- */
+  const qualityBtn = document.createElement("div");
+  qualityBtn.className = "dplayer-quality";
+  qualityBtn.innerHTML = 
+${qualitySVG}<div class="dplayer-quality-menu"></div>;
+
+  const menu = qualityBtn.querySelector(".dplayer-quality-menu");
+
+  Object.keys(sources)
+    .sort((a, b) => {
+      if (a === "Auto") return 1;
+      if (b === "Auto") return -1;
+      return parseInt(a) - parseInt(b);
+    })
+    .forEach(q => {
+      const item = document.createElement("div");
+      item.className = dplayer-quality-menu-item${q === currentQuality ? " active" : ""};
+      item.textContent = q;
+
+      item.onclick = () => {
+        if (q !== currentQuality) {
+          let t = dp.video.currentTime;
+          currentQuality = q;
+
+          initPlayer(sources[q]);
+          dp.on("loadeddata", () => dp.seek(t));
+        }
+        menu.classList.remove("show");
+      };
+
+      menu.appendChild(item);
+    });
+
+  qualityBtn.onclick = (e) => {
+    e.stopPropagation();
+    menu.classList.toggle("show");
+
+    setTimeout(() => {
+      const close = (ev) => {
+        if (!qualityBtn.contains(ev.target)) {
+          menu.classList.remove("show");
+          document.removeEventListener("click", close);
+        }
+      };
+      document.addEventListener("click", close);
+    }, 0);
+  };
+
+  /* ---- INSERT BUTTONS ---- */
+  const settings = controls.querySelector(".dplayer-setting");
+  if (settings) {
+    controls.insertBefore(qualityBtn, settings);
+    controls.insertBefore(zoomBtn, settings);
+  } else {
+    controls.prepend(qualityBtn);
+    controls.prepend(zoomBtn);
+  }
+}
+
+/* -------------------------------
+      URL ?kick=username SUPPORT
+-------------------------------- */
+const kickUser = new URLSearchParams(location.search).get("id");
+if (kickUser) {
+  getKickStream(kickUser);
+} else {
+  alert("Use ?id=username");
+}
+</script>
 </body>
 </html>
