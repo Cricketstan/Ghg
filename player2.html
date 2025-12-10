@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>DPlayer</title>
+  <title>DPlayer Kick Combo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.css">
@@ -23,7 +23,6 @@
     .dplayer-video-normal { object-fit: contain !important; }
     .dplayer-video-zoomed { object-fit: cover !important; }
 
-    /* ---- BUTTONS ---- */
     .dplayer-icons-right .dplayer-zoom,
     .dplayer-icons-right .dplayer-quality {
       display: inline-block;
@@ -54,7 +53,6 @@
       stroke-linejoin: round;
     }
 
-    /* ---- QUALITY MENU ---- */
     .dplayer-quality-menu {
       position: absolute;
       right: 0;
@@ -87,6 +85,7 @@
 <div id="dplayer"></div>
 
 <script>
+
 let dp, zoomed = false, currentQuality = "Auto", sources = {};
 
 const qualityMap = {
@@ -98,38 +97,35 @@ const qualityMap = {
   "1080": "1080p"
 };
 
-/* ---- SAME SVG AS FIRST PLAYER ---- */
-const zoomSVG = 
-  <svg viewBox="0 0 24 24">
-    <path d="M15 4V7C15 8.1 15.9 9 17 9H20M9 4V7C9 8.1 8.1 9 7 9H4M15 20V17C15 15.9 15.9 15 17 15H20M9 20V17C9 15.9 8.1 15 7 15H4"/>
-  </svg>
-;
+const zoomSVG = `
+<svg viewBox="0 0 24 24">
+  <path d="M15 4V7C15 8.1 15.9 9 17 9H20M9 4V7C9 8.1 8.1 9 7 9H4M15 20V17C15 15.9 15.9 15 17 15H20M9 20V17C9 15.9 8.1 15 7 15H4"/>
+</svg>`;
 
-const qualitySVG = 
-  <svg viewBox="0 0 32 32">
-    <path d="M28 6L4 6M28 16L4 16M28 26L4 26M24 3L24 9M8 13L8 19M20 23L20 29"/>
-  </svg>
-;
+const qualitySVG = `
+<svg viewBox="0 0 32 32">
+  <path d="M28 6L4 6M28 16L4 16M28 26L4 26M24 3L24 9M8 13L8 19M20 23L20 29"/>
+</svg>`;
 
-/* -------------------------------
-      FETCH KICK STREAM URL
--------------------------------- */
+/* ------------------------------------
+       FETCH STREAM USING ?id=
+------------------------------------ */
 async function getKickStream(username) {
   try {
-    const res = await fetch(https://kick.com/api/v2/channels/${username});
+    const res = await fetch(`https://kick.com/api/v2/channels/${username}`);
     const json = await res.json();
 
-    if (!json.playback_url) return alert("stream offline!");
+    if (!json.playback_url) return alert("Stream Offline!");
 
     loadMasterPlaylist(json.playback_url);
   } catch (e) {
-    alert("Kick Error: " + e.message);
+    alert("Kick API Error: " + e.message);
   }
 }
 
-/* -------------------------------
-     PARSE M3U8 MASTER PLAYLIST
--------------------------------- */
+/* ------------------------------------
+       PARSE MASTER M3U8
+------------------------------------ */
 async function loadMasterPlaylist(url) {
   try {
     const r = await fetch(url);
@@ -141,7 +137,7 @@ async function loadMasterPlaylist(url) {
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].startsWith("#EXT-X-STREAM-INF")) {
         const match = lines[i].match(/RESOLUTION=(\d+)x(\d+)/);
-        const next = lines[i+1];
+        const next = lines[i + 1];
 
         if (match && next.startsWith("http")) {
           const h = match[2];
@@ -152,25 +148,27 @@ async function loadMasterPlaylist(url) {
     }
 
     currentQuality = sources["720p"] ? "720p" : "Auto";
-
     initPlayer(sources[currentQuality]);
 
   } catch (e) {
     alert("Playlist Error: " + e.message);
   }
 }
-/* -------------------------------
-            INIT PLAYER
--------------------------------- */
+
+/* ------------------------------------
+             INIT PLAYER
+------------------------------------ */
 function initPlayer(url) {
   if (dp) dp.destroy();
 
   dp = new DPlayer({
     container: document.getElementById("dplayer"),
     autoplay: true,
-    video: { url, 
-    type: "hls",
-    pic: ""},
+    video: {
+      url,
+      type: "hls",
+      pic: "https://webiptv.site/weiptv.webp"
+    },
     theme: '#b7daff'
   });
 
@@ -182,20 +180,18 @@ function initPlayer(url) {
   dp.video.volume = 1;
 }
 
-/* -------------------------------
-      ADD ZOOM + QUALITY BUTTONS
--------------------------------- */
+/* ------------------------------------
+         CUSTOM BUTTONS
+------------------------------------ */
 function addCustomControls() {
   const controls = document.querySelector(".dplayer-icons-right");
   if (!controls) return setTimeout(addCustomControls, 100);
 
-  // remove old buttons
   [".dplayer-zoom", ".dplayer-quality"].forEach(c => {
     const old = controls.querySelector(c);
     if (old) old.remove();
   });
 
-  /* ---- ZOOM BUTTON ---- */
   const zoomBtn = document.createElement("div");
   zoomBtn.className = "dplayer-zoom";
   zoomBtn.innerHTML = zoomSVG;
@@ -205,11 +201,9 @@ function addCustomControls() {
     dp.video.classList.toggle("dplayer-video-normal", !zoomed);
   };
 
-  /* ---- QUALITY BUTTON ---- */
   const qualityBtn = document.createElement("div");
   qualityBtn.className = "dplayer-quality";
-  qualityBtn.innerHTML = 
-${qualitySVG}<div class="dplayer-quality-menu"></div>;
+  qualityBtn.innerHTML = `${qualitySVG}<div class="dplayer-quality-menu"></div>`;
 
   const menu = qualityBtn.querySelector(".dplayer-quality-menu");
 
@@ -221,14 +215,13 @@ ${qualitySVG}<div class="dplayer-quality-menu"></div>;
     })
     .forEach(q => {
       const item = document.createElement("div");
-      item.className = dplayer-quality-menu-item${q === currentQuality ? " active" : ""};
+      item.className = `dplayer-quality-menu-item${q === currentQuality ? " active" : ""}`;
       item.textContent = q;
 
       item.onclick = () => {
         if (q !== currentQuality) {
-          let t = dp.video.currentTime;
+          const t = dp.video.currentTime;
           currentQuality = q;
-
           initPlayer(sources[q]);
           dp.on("loadeddata", () => dp.seek(t));
         }
@@ -253,7 +246,6 @@ ${qualitySVG}<div class="dplayer-quality-menu"></div>;
     }, 0);
   };
 
-  /* ---- INSERT BUTTONS ---- */
   const settings = controls.querySelector(".dplayer-setting");
   if (settings) {
     controls.insertBefore(qualityBtn, settings);
@@ -264,9 +256,9 @@ ${qualitySVG}<div class="dplayer-quality-menu"></div>;
   }
 }
 
-/* -------------------------------
-      URL ?kick=username SUPPORT
--------------------------------- */
+/* ------------------------------------
+          ?id=username SUPPORT
+------------------------------------ */
 const kickUser = new URLSearchParams(location.search).get("id");
 if (kickUser) {
   getKickStream(kickUser);
